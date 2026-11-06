@@ -45,7 +45,8 @@ export function prepareElectronRuntime({ source, install = true, env = process.e
     'electron_install_arch', 'electron_install_platform', 'npm_config_arch', 'npm_config_platform'])
   const installerEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !excluded.has(key.toLowerCase())))
   Object.assign(installerEnv, { ELECTRON_INSTALL_PLATFORM: process.platform, ELECTRON_INSTALL_ARCH: process.arch,
-    npm_config_platform: process.platform, npm_config_arch: process.arch })
+    npm_config_platform: process.platform, npm_config_arch: process.arch,
+    ELECTRON_MIRROR: installerEnv.ELECTRON_MIRROR || process.env.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/' })
   // install.js unpacks with @electron-internal/extract-zip, whose Windows binding imports
   // VCRUNTIME140.dll. A fresh Windows has none, so the load fails (ERR_DLOPEN_FAILED).
   // Node loads bindings with LOAD_WITH_ALTERED_SEARCH_PATH, so a copy beside the binding
