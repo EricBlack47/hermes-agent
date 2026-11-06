@@ -2198,6 +2198,9 @@ export interface TelegramOnboardingApplyResponse {
 export interface SessionMessage {
   role: "user" | "assistant" | "system" | "tool";
   content: string | null;
+  /** Presentation typing persisted on the row ("hidden", "internal_notification",
+   * producer-card kinds). Absent/null on ordinary turns. */
+  display_kind?: string | null;
   tool_calls?: Array<{
     id: string;
     function: { name: string; arguments: string };

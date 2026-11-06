@@ -269,6 +269,40 @@ class TestSessionOps:
             for update in updates
         )
 
+    @pytest.mark.asyncio
+    async def test_resume_session_drops_hidden_and_internal_notification_rows(self, agent):
+        """Rows the person never saw — ``hidden`` scaffolding and machine-injected
+        ``internal_notification`` turns — are model context, not transcript: replay must not
+        paint them as user/assistant chunks (same rows the gateway attach path replays)."""
+        mock_conn = MagicMock(spec=acp.Client)
+        mock_conn.session_update = AsyncMock()
+        agent._conn = mock_conn
+
+        new_resp = await agent.new_session(cwd="/tmp")
+        state = agent.session_manager.get_session(new_resp.session_id)
+        state.history = [
+            {"role": "user", "content": "real prompt"},
+            {"role": "user", "content": "[IMPORTANT: background process pid-9 finished]",
+             "display_kind": "internal_notification"},
+            {"role": "user", "content": "[CONTEXT COMPACTION — REFERENCE ONLY]",
+             "display_kind": "hidden"},
+            {"role": "assistant", "content": "real reply"},
+        ]
+
+        mock_conn.session_update.reset_mock()
+        resp = await agent.resume_session(cwd="/tmp", session_id=new_resp.session_id)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert isinstance(resp, ResumeSessionResponse)
+        updates = [call.kwargs["update"] for call in mock_conn.session_update.await_args_list]
+        texts = [
+            update.content.text
+            for update in updates
+            if getattr(update, "session_update", "") in ("user_message_chunk", "agent_message_chunk")
+        ]
+        assert texts == ["real prompt", "real reply"]
+
 
 
 

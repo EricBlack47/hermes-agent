@@ -313,9 +313,11 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
             continue
         if role == "assistant" and m.get("tool_calls"):
             _remember_tool_call_args(m["tool_calls"], tool_call_args)
-        # display_kind="hidden": model-facing scaffolding the "[System:" sniff does not catch (a held
-        # turn's commentary too: its tool rows still render, labelled from the calls read above).
-        if m.get("display_kind") == "hidden":
+        # display_kind="hidden"/"internal_notification": model-facing machinery the "[System:"
+        # sniff does not catch — scaffolding (a held turn's commentary too: its tool rows still
+        # render, labelled from the calls read above) and machine-synthesized notification wakes
+        # persisted role='user' that the person never saw. Both are context, not transcript.
+        if m.get("display_kind") in ("hidden", "internal_notification"):
             continue
         content_text = _user_image_display_text(m.get("content")) if role == "user" else None
         if content_text is None:

@@ -669,8 +669,8 @@ def _is_untyped_scaffold_notice(message) -> bool:
 
 
 def _project_for_display(messages: list, *, home=None, inline_images: bool = True) -> list:
-    """Replace compaction summaries with their display-only projection and hide untyped
-    gateway-scaffold notices.
+    """Replace compaction summaries with their display-only projection and hide rows the
+    person never saw.
 
     Recovery scaffolding (e.g. the stream-timeout nudge appended when a tool call's stream
     is cut) persists as a ``[System: …]`` ``role=user`` row with no ``display_kind``. This
@@ -679,6 +679,9 @@ def _project_for_display(messages: list, *, home=None, inline_images: bool = Tru
     so a shipped scaffold row can never resolve as a rewind/regenerate target and dead-ends
     every retry (``refusing truncation without fallback``). Hide them the same way the
     Desktop collapses other display-only rows; typed notices stay for the timeline.
+    ``internal_notification`` rows are machine-synthesized wakes persisted ``role=user``
+    so the model reads them — the same never-painted class, so they project to ``hidden``
+    here exactly as ``session.resume`` drops them (the stored row keeps its kind).
     """
     from agent.compaction_display import project_compaction_message_for_display
     from agent.context_compressor import is_compaction_summary_message
@@ -710,7 +713,10 @@ def _project_for_display(messages: list, *, home=None, inline_images: bool = Tru
             message.get("role"), message.get("content"))
         if failed_turn:
             message = {**message, "display_kind": failed_turn}
-        if _is_untyped_scaffold_notice(message):
+        # Rows the person never saw ship as hidden: untyped "[System:" scaffold
+        # notices, and machine-synthesized internal_notification wakes persisted
+        # role='user' (session.resume drops the same rows outright).
+        if _is_untyped_scaffold_notice(message) or message.get("display_kind") == "internal_notification":
             projected = message.copy()
             projected["display_kind"] = "hidden"
             projected_messages.append(projected)

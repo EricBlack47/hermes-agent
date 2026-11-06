@@ -40,6 +40,18 @@ describe('toTranscriptMessages', () => {
     expect(result.every(m => !m.text?.includes('COMPACTION'))).toBe(true)
   })
 
+  it('skips internal_notification rows entirely', () => {
+    const rows = [
+      { role: 'user', text: 'visible prompt' },
+      { role: 'user', text: '[IMPORTANT: background process pid-9 finished]', display_kind: 'internal_notification' },
+      { role: 'assistant', text: 'visible reply' }
+    ]
+
+    const result = toTranscriptMessages(rows)
+    expect(result.map(msg => msg.text)).toEqual(['visible prompt', 'visible reply'])
+    expect(result.every(m => !m.text?.includes('pid-9'))).toBe(true)
+  })
+
   it('projects model_switch as an event with replaced text', () => {
     const rows = [
       { role: 'user', text: 'hello' },

@@ -998,6 +998,18 @@ class TestFTS5Search:
         assert isinstance(results[0]["context"], list)
         assert len(results[0]["context"]) > 0
 
+    @pytest.mark.parametrize("kind", ["hidden", "internal_notification"])
+    def test_search_skips_rows_the_person_never_saw(self, db, kind):
+        """Scaffolding and injected-notification rows are model context; a search
+        hit on their text would surface machinery as if the user had typed it."""
+        db.create_session(session_id="s1", source="cli")
+        db.append_message("s1", role="user", content="real question about zephyr")
+        db.append_message("s1", role="user", content="machine notice zephyrquokka",
+                          display_kind=kind)
+
+        assert db.search_messages("zephyrquokka") == []
+        assert db.search_messages("zephyr")
+
     def test_search_fields_project_results_without_changing_default(self, db):
         db.create_session(session_id="s1", source="cli")
         db.append_message("s1", role="user", content="Tell me about Kubernetes")
@@ -2621,6 +2633,18 @@ class TestListSessionsRich:
         sessions = db.list_sessions_rich()
         assert len(sessions) == 1
         assert "Help me refactor the auth module" in sessions[0]["preview"]
+
+    @pytest.mark.parametrize("kind", ["hidden", "internal_notification"])
+    def test_preview_skips_rows_the_person_never_saw(self, db, kind):
+        """A session led by machine-only rows must headline the first REAL user
+        message, not scaffolding or an injected notification."""
+        db.create_session("s1", "cli")
+        db.append_message("s1", "user", "machine notice zephyrquokka", display_kind=kind)
+        db.append_message("s1", "user", "the real first question")
+        sessions = db.list_sessions_rich()
+        assert len(sessions) == 1
+        assert "the real first question" in sessions[0]["preview"]
+        assert "zephyrquokka" not in sessions[0]["preview"]
 
     @pytest.mark.parametrize(
         "unsafe_model_config",

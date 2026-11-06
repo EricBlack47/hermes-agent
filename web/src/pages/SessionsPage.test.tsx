@@ -260,6 +260,41 @@ describe("structured reasoning rendering (#59957)", () => {
   });
 });
 
+describe("transcript display_kind filtering", () => {
+  it("never paints hidden or internal_notification rows as transcript bubbles", async () => {
+    apiMocks.getSessionMessages.mockResolvedValue({
+      session_id: "sid-kinds",
+      messages: [
+        { role: "user", content: "real prompt" },
+        {
+          role: "user",
+          content: "[IMPORTANT: background process pid-9 finished]",
+          display_kind: "internal_notification",
+        },
+        {
+          role: "user",
+          content: "[CONTEXT COMPACTION — REFERENCE ONLY]",
+          display_kind: "hidden",
+        },
+        { role: "assistant", content: "real reply" },
+      ],
+    });
+    await renderSessionsPage([
+      { id: "sid-kinds", profile: "default", source: "cli", model: null, title: "Kinds", started_at: 1,
+        ended_at: null, last_active: 1, is_active: false, message_count: 4, tool_call_count: 0,
+        input_tokens: 1, output_tokens: 1, preview: "real" },
+    ]);
+    await act(async () => click(button("Delete session")!.closest("div.cursor-pointer")));
+    await waitFor(() => (document.body.textContent ?? "").includes("real reply"));
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("real prompt");
+    expect(text).toContain("real reply");
+    expect(text).not.toContain("pid-9");
+    expect(text).not.toContain("CONTEXT COMPACTION");
+  });
+});
+
 describe("SessionsPage header slots across navigation", () => {
   it("leaves the next page's header action in place", async () => {
     apiMocks.getSessions.mockResolvedValue({ sessions: [], total: 0, limit: 20, offset: 0 });

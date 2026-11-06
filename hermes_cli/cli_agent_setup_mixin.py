@@ -159,8 +159,8 @@ def _tool_calls_summary(tool_calls) -> str:
     return t(key, count=len(tool_calls), names=names_str)
 
 
-# display_kind -> catalog key of the recap event line (resolved at call time); ``hidden`` rows
-# are skipped before this lookup.
+# display_kind -> catalog key of the recap event line (resolved at call time); ``hidden`` and
+# ``internal_notification`` rows are skipped before this lookup — the person never saw them.
 _RESUME_EVENT_KEYS = {
     "model_switch": "cli.resume.event_model_changed",
     "async_delegation_complete": "cli.resume.event_delegation_completed",
@@ -190,7 +190,7 @@ def _collect_resume_entries(display_history, disp: dict, clean_assistant):
         display_kind = msg.get("display_kind")
         content = msg.get("content")
         tool_calls = msg.get("tool_calls") or []
-        if display_kind == "hidden":
+        if display_kind in ("hidden", "internal_notification"):
             continue
         if display_kind in _RESUME_EVENT_KEYS:
             metadata = msg.get("display_metadata") or {}

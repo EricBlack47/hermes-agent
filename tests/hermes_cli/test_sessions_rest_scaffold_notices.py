@@ -13,6 +13,11 @@ A stored ``role=user`` ``display_kind=steer`` row must ship the user's own words
 ``display_content`` (the same unwrap ``session.resume`` applies) — marker-wrapped content
 never pairs with the optimistic plain-text copy, so Desktop renders the correction twice
 and reorders it (#121978).
+
+``display_kind=internal_notification`` rows are machine-synthesized wakes persisted
+``role=user`` so the model reads them; the person never saw them, so the projection
+ships them as ``hidden`` — the same never-painted class ``session.resume`` drops
+outright — while the stored row keeps its kind.
 """
 
 from hermes_cli.web_routers.sessions import _project_for_display
@@ -55,6 +60,44 @@ def test_rest_projection_hides_untyped_gateway_notices_and_keeps_typed_ones():
     assert by_id[2]["content"] == messages[1]["content"]
     # Input rows are not mutated in place.
     assert "display_kind" not in messages[1]
+
+
+def test_rest_projection_hides_internal_notification_rows():
+    """A machine-synthesized ``internal_notification`` wake is model context, not a user
+    turn: it projects to ``hidden`` like the scaffold branch, keeping row count, content,
+    and the stored kind untouched."""
+    messages = [
+        {"role": "user", "id": 1, "content": "hello", "timestamp": 1.0},
+        {
+            "role": "user",
+            "id": 2,
+            "content": "[IMPORTANT: Background process proc_1 exited with code 0]",
+            "display_kind": "internal_notification",
+            "timestamp": 2.0,
+        },
+        {
+            "role": "user",
+            "id": 3,
+            "content": "opaque process payload",
+            "display_kind": "process_complete",
+            "timestamp": 3.0,
+        },
+        {"role": "assistant", "id": 4, "content": "ok", "timestamp": 4.0},
+    ]
+
+    projected = _project_for_display(messages)
+    by_id = {message["id"]: message for message in projected}
+
+    # No row is dropped: offsets/counts stay stable for pagination and "Show earlier".
+    assert len(projected) == len(messages)
+    assert by_id[2]["display_kind"] == "hidden"
+    # The payload itself is preserved — only the display kind is projected.
+    assert by_id[2]["content"] == messages[1]["content"]
+    # A human user row and a visible timeline notice remain untouched.
+    assert by_id[1].get("display_kind") is None
+    assert by_id[3].get("display_kind") == "process_complete"
+    # Input rows are not mutated in place — the stored kind stays internal_notification.
+    assert messages[1]["display_kind"] == "internal_notification"
 
 
 def test_rest_projection_still_projects_compaction_summaries():

@@ -579,6 +579,39 @@ describe('toChatMessages', () => {
     ])
   })
 
+  it('never paints a machine internal_notification wake as a user bubble', () => {
+    // Gateway machinery persists wake rows as role='user' +
+    // display_kind='internal_notification' so the model reads them; the person
+    // never typed them, so hydration drops them exactly like display_kind='hidden'.
+    const messages = toChatMessages([
+      { role: 'user', content: 'start the dev server', timestamp: 1 },
+      { role: 'assistant', content: 'Started on slot 0.', timestamp: 2 },
+      {
+        role: 'user',
+        content: '[Background process proc_ea2c heartbeat #4 — still running after 4m]',
+        display_kind: 'internal_notification',
+        timestamp: 3
+      },
+      { role: 'user', content: 'focus on the parser', display_kind: 'steer', timestamp: 4 },
+      { role: 'assistant', content: 'Steered.', timestamp: 5 },
+      {
+        role: 'user',
+        content: 'opaque process payload',
+        display_kind: 'process_complete',
+        timestamp: 6
+      }
+    ])
+
+    expect(messages.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'system'])
+    expect(messages.map(chatMessageText)).toEqual([
+      'start the dev server',
+      'Started on slot 0.',
+      'focus on the parser',
+      'Steered.',
+      'background process finished'
+    ])
+  })
+
   // Hermes closes a failed turn with an assistant-role row (agent/turn_failure_copy.py);
   // painted as the model's reply it read as the assistant refusing the request.
   it('renders the failed-turn boundary as a Hermes notice, not a model reply', () => {

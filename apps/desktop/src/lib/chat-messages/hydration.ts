@@ -159,12 +159,22 @@ function displayContentForMessage(role: SessionMessage['role'], content: unknown
   return [missing.join('\n'), visibleText].filter(Boolean).join('\n\n') || visibleText
 }
 
+// Kinds whose rows are model context, never something the person authored:
+// `hidden` scaffolding and machine-synthesized `internal_notification` wakes
+// (persisted role='user' so the model reads them). Both produce no visible
+// transcript content — the empty-parts path below skips the row outright.
+const NON_TRANSCRIPT_DISPLAY_KINDS = ['hidden', 'internal_notification'] as const
+
+function isNonTranscriptDisplayKind(displayKind: SessionMessage['display_kind']): boolean {
+  return displayKind !== undefined && (NON_TRANSCRIPT_DISPLAY_KINDS as readonly string[]).includes(displayKind)
+}
+
 function transcriptContent(
   displayKind: SessionMessage['display_kind'],
   role: SessionMessage['role'],
   content: string
 ): string | null {
-  if (displayKind === 'hidden') {
+  if (isNonTranscriptDisplayKind(displayKind)) {
     return null
   }
 
@@ -565,7 +575,9 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
     const durableComplete = sourceHasTools ? false : rowId !== undefined ? true : undefined
 
     const codexText =
-      displayRole === 'assistant' && message.display_kind !== 'hidden' ? codexMessageItemText(message) : null
+      displayRole === 'assistant' && !isNonTranscriptDisplayKind(message.display_kind)
+        ? codexMessageItemText(message)
+        : null
 
     const commentary = codexText?.commentary ?? []
 

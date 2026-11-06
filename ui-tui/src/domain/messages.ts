@@ -46,8 +46,9 @@ export const toTranscriptMessages = (rows: unknown): Msg[] => {
     }
 
     // Display-only timeline events: render as dim ◈ markers instead of
-    // opaque user messages. Hidden compaction handoffs are skipped entirely.
-    if (display_kind === 'hidden') {
+    // opaque user messages. Hidden scaffolding and machine-injected
+    // notifications are skipped entirely — the person never saw them.
+    if (display_kind === 'hidden' || display_kind === 'internal_notification') {
       continue
     }
 

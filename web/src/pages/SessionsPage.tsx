@@ -353,6 +353,13 @@ function MessageBubble({
   );
 }
 
+// Rows the person never saw — hidden scaffolding, machine-injected
+// notifications — are model context, not transcript; every transcript
+// surface drops them the same way display_kind="hidden" is dropped.
+function isVisibleTranscriptRow(msg: SessionMessage): boolean {
+  return msg.display_kind !== "hidden" && msg.display_kind !== "internal_notification";
+}
+
 /** Message list with auto-scroll to first search hit. */
 function MessageList({
   messages,
@@ -430,6 +437,7 @@ function SessionRow({
     : null) ?? { icon: Globe, color: "text-muted-foreground" };
   const SourceIcon = sourceInfo.icon;
   const hasTitle = session.title && session.title !== "Untitled";
+  const visibleMessages = messages?.filter(isVisibleTranscriptRow) ?? null;
 
   const submitRename = async () => {
     const value = renameValue.trim();
@@ -663,7 +671,7 @@ function SessionRow({
 
       {isExpanded && (
         <div className="min-w-0 border-t border-border bg-background/50 p-4">
-          {messages === null && !error && (
+          {visibleMessages === null && !error && (
             <div className="flex items-center justify-center py-8">
               <Spinner className="text-xl text-primary" />
             </div>
@@ -671,13 +679,13 @@ function SessionRow({
           {error && (
             <p className="text-sm text-destructive py-4 text-center">{error}</p>
           )}
-          {messages && messages.length === 0 && (
+          {visibleMessages && visibleMessages.length === 0 && (
             <p className="text-sm text-muted-foreground py-4 text-center">
               {t.sessions.noMessages}
             </p>
           )}
-          {messages && messages.length > 0 && (
-            <MessageList messages={messages} highlight={searchQuery} />
+          {visibleMessages && visibleMessages.length > 0 && (
+            <MessageList messages={visibleMessages} highlight={searchQuery} />
           )}
         </div>
       )}

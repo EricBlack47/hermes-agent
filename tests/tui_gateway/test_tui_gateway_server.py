@@ -2984,6 +2984,33 @@ def test_history_to_messages_drops_display_hidden_scaffolding():
     assert all("api_content" not in m for m in projected)
 
 
+def test_history_to_messages_drops_internal_notification_rows():
+    # Machine-synthesized notification wakes persist as role="user" +
+    # display_kind="internal_notification" so the model reads them; the person
+    # never saw them, so this projection drops them exactly like hidden rows —
+    # the same rows REST projects to display_kind="hidden".
+    history = [
+        {"role": "user", "content": "real ask"},
+        {
+            "role": "user",
+            "content": "[IMPORTANT: Background process proc_1 exited with code 0]",
+            "display_kind": "internal_notification",
+        },
+        {"role": "user", "content": "real follow-up"},
+        {
+            "role": "user",
+            "content": "opaque process payload",
+            "display_kind": "process_complete",
+        },
+    ]
+
+    assert server._history_to_messages(history) == [
+        {"role": "user", "text": "real ask"},
+        {"role": "user", "text": "real follow-up"},
+        {"role": "user", "text": "opaque process payload", "display_kind": "process_complete"},
+    ]
+
+
 def test_history_to_messages_projects_a_skill_turn_to_its_invocation():
     # A /skill invocation is persisted EXPANDED: the activation note plus the
     # entire skill body. That payload is model-facing scaffolding -- this

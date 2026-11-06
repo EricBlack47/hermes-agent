@@ -150,6 +150,25 @@ class TestDisplayResumedHistory:
         assert "You:" not in output
         assert "opaque" not in output
 
+    def test_internal_notification_is_not_a_recap_user_line(self):
+        """Machine-injected notification rows (peer dispatches, watch wakes) are
+        model context the person never saw — the recap must not paint them as
+        ``You:`` lines, same as ``hidden`` scaffolding."""
+        cli = _make_cli()
+        cli.conversation_history = [
+            {"role": "user", "content": "real ask"},
+            {"role": "user", "content": "peer dispatch: run the nightly audit",
+             "display_kind": "internal_notification"},
+            {"role": "assistant", "content": "done"},
+        ]
+
+        output = self._capture_display(cli)
+
+        assert "real ask" in output
+        assert "done" in output
+        assert "nightly audit" not in output
+        assert output.count("You:") == 1
+
 
 
     def test_tool_only_message_skipped_by_default(self):

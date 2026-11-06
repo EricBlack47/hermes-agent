@@ -166,9 +166,13 @@ def _user_history_updates(message: dict[str, Any]):
 def _history_replay_updates(history: list[dict[str, Any]]):
     """Yield ACP session updates that reconstruct a persisted transcript, in order: user/assistant
     text (with compaction ``_meta``), assistant thoughts, and tool-call start/complete pairs
-    (``todo`` results also re-emit the plan)."""
+    (``todo`` results also re-emit the plan). Rows the person never saw — ``hidden`` scaffolding
+    and machine-injected ``internal_notification`` turns — are model context, not transcript, and
+    are dropped here so every replay caller (stdio resume, gateway attach) hides them alike."""
     active_tool_calls: dict[str, tuple[str, dict[str, Any]]] = {}
     for message in history:
+        if message.get("display_kind") in ("hidden", "internal_notification"):
+            continue
         role = str(message.get("role") or "")
         if role == "user":
             yield from _user_history_updates(message)
