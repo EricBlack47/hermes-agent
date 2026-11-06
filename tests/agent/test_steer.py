@@ -774,6 +774,77 @@ class TestSteerMarkerContract:
 
 
 
+class TestGatewayOriginBlockDisplay:
+    """Busy-path steer/redirect text arrives wrapped in the gateway's routing-origin block
+    (``Gateway message origin (JSON...)``). That block is model-facing scaffolding: persisted
+    ``content`` — what every transcript surface reads — must carry only the user's own words,
+    while ``api_content`` keeps the wrapped bytes the provider replays (api_content substitutes
+    into content on the wire, so the model sees byte-identical text either way)."""
+
+    @staticmethod
+    def _wrapped(text: str) -> str:
+        import json
+        from agent.prompt_builder import format_gateway_origin_block
+
+        origin = {"platform": "telegram", "chat_id": "c1", "user_id": "u1"}
+        encoded = json.dumps(origin, ensure_ascii=True)
+        return format_gateway_origin_block(encoded, text)
+
+    def test_steer_row_strips_origin_from_display_content_only(self):
+        from agent.prompt_builder import GATEWAY_ORIGIN_SENTINEL, steer_user_row
+
+        row = steer_user_row(self._wrapped("focus on the parser"))
+
+        assert row["display_kind"] == "steer"
+        assert "focus on the parser" in row["content"]
+        assert GATEWAY_ORIGIN_SENTINEL not in row["content"]
+        # The model-facing replay keeps the origin block the router needs.
+        assert GATEWAY_ORIGIN_SENTINEL in row["api_content"]
+        assert "focus on the parser" in row["api_content"]
+
+    def test_steer_row_without_origin_is_unchanged(self):
+        """CLI steers pass bare text: no origin block means no api_content sidecar and the
+        content stays exactly what the injector always emitted."""
+        from agent.prompt_builder import steer_user_row
+
+        row = steer_user_row("plain note")
+
+        assert "api_content" not in row
+        assert "plain note" in row["content"]
+
+    def test_redirect_row_strips_origin_from_content_keeps_it_in_replay(self):
+        from agent.conversation_loop import _apply_active_turn_redirect
+        from agent.prompt_builder import GATEWAY_ORIGIN_SENTINEL
+
+        agent = _bare_agent()
+        agent._current_streamed_assistant_text = "Visible draft."
+        messages = [{"role": "user", "content": "start"}]
+
+        _apply_active_turn_redirect(agent, messages, self._wrapped("还有Obsidian"))
+
+        correction = messages[-1]
+        assert correction["role"] == "user"
+        assert correction["content"] == "还有Obsidian"
+        assert GATEWAY_ORIGIN_SENTINEL not in correction["content"]
+        # api_content carries scaffold + the wrapped text: origin survives for the model.
+        replayed = correction["api_content"]
+        assert GATEWAY_ORIGIN_SENTINEL in replayed
+        assert "还有Obsidian" in replayed
+        assert "Context from the interrupted assistant response" in replayed
+
+    def test_strip_removes_every_origin_block_and_ignores_quoted_sentinel(self):
+        from agent.prompt_builder import GATEWAY_ORIGIN_SENTINEL, strip_gateway_origin_blocks
+
+        first = self._wrapped("first")
+        second = self._wrapped("second")
+        merged = f"{first}\n\n[Additional user correction]\n{second}"
+        assert strip_gateway_origin_blocks(merged) == "first\n\n[Additional user correction]\nsecond"
+        # A sentinel merely quoted mid-line inside user text is not a block.
+        quoted = f'she said "{GATEWAY_ORIGIN_SENTINEL}" verbatim'
+        assert strip_gateway_origin_blocks(quoted) == quoted
+        assert strip_gateway_origin_blocks("no blocks here") == "no blocks here"
+
+
 class TestSteerRowIsHumanInput:
     def test_steer_row_counts_as_a_user_originated_turn(self, tmp_path):
         """The steer row is typed (renderer label, alternation-repair guard) but it carries full user

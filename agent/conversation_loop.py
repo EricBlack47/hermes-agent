@@ -22,7 +22,7 @@ from agent.message_metadata import append_message, without_persistence_fields
 from agent.message_sanitization import _repair_tool_call_arguments, _sanitize_surrogates
 from agent.model_metadata import MINIMUM_CONTEXT_LENGTH, _estimate_tools_tokens_rough
 from agent.process_bootstrap import _install_safe_stdio
-from agent.prompt_builder import RUNTIME_ENVIRONMENT_END, RUNTIME_ENVIRONMENT_HEADING
+from agent.prompt_builder import RUNTIME_ENVIRONMENT_END, RUNTIME_ENVIRONMENT_HEADING, strip_gateway_origin_blocks
 from agent.prompt_refresh import rebuild_for_refresh, requested_epoch, stamp_prompt_epoch, stored_prompt_refresh_epoch
 from agent.prompt_caching import (
     build_prompt_cache_plan,
@@ -350,8 +350,13 @@ def _apply_active_turn_redirect(agent: Any, messages: list[dict[str, Any]], text
         # Hidden row with a neutral api_content (#88955). Never _INTERRUPT_SCAFFOLD_MARKER:
         # as assistant text the model echoes it (#81841).
         append_message(messages, {"role": "assistant", "content": visible} if visible else hidden_interrupt_placeholder_row())
-    # Transcript shows the user's own words; the provider replays the scaffolded form.
-    append_message(messages, {"role": "user", "content": text, "api_content": correction})
+    # Transcript shows the user's own words; the provider replays the scaffolded form. A busy-path
+    # redirect arrives wrapped in the gateway's routing-origin block — strip it from ``content``
+    # (display/transcript surfaces read it) while ``api_content`` keeps the origin inside the
+    # scaffolded correction the model replays byte-identically.
+    append_message(messages, {
+        "role": "user", "content": strip_gateway_origin_blocks(text), "api_content": correction,
+    })
 
     # Stateful scrubber for <memory-context> spans split across stream deltas (#5719).  sanitize_context()
     # alone can't survive chunk boundaries because the block regex needs both tags in one string.
