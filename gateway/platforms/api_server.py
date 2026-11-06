@@ -3667,6 +3667,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         request_id: Optional[str] = None, history_from_session: bool = False, run_owner_scope=None,
         session_history_delivery: str = "", turn_author: Optional[dict[str, Any]] = None,
         relay_metadata: Optional[dict[str, Any]] = None, notification_category: str = "result",
+        internal_wake: bool = False,
         resume_unanswered_turn: bool = False, approval_notify_callback=None,
         approval_session_key: Optional[str] = None, walked_from: Optional[str] = None) -> tuple:
         """Create an agent and run one turn in a thread executor -> ``(result, usage)``.
@@ -3682,7 +3683,10 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         ``resume_unanswered_turn`` marks a policy-gated re-run of a turn whose user row the failed attempt
         already persisted: the transcript's unanswered tail row is adopted from ``conversation_history``
         as THIS turn's user message instead of being appended a second time
-        (``agent.session_persistence.adopt_unanswered_turn``; #115325)."""
+        (``agent.session_persistence.adopt_unanswered_turn``; #115325).
+        ``internal_wake`` marks the gateway's own wake self-post (``gateway/wake.py``): the turn is
+        machine-synthesized, so its persisted user row keeps the machinery display kind instead of
+        persisting as an ordinary client prompt."""
         if getattr(self.gateway_runner, "session_authority", None) is not None:
             from gateway.session_api_turn import run_api_turn
             return await run_api_turn(self, user_message=user_message, conversation_history=conversation_history,
@@ -3698,6 +3702,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                 bind_declared_conversation=bind_declared_conversation, request_id=request_id, run_owner_scope=run_owner_scope,
                 history_from_session=history_from_session, session_history_delivery=session_history_delivery,
                 turn_author=turn_author, resume_unanswered_turn=resume_unanswered_turn, relay_metadata=relay_metadata,
+                internal_wake=internal_wake,
                 approval_notify_callback=approval_notify_callback, approval_session_key=approval_session_key)
         loop = asyncio.get_running_loop()
         # ContextVars do not follow run_in_executor threads: capture here, re-enter in _run().

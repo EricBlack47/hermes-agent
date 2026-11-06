@@ -691,6 +691,10 @@ async def run_internal_session_turn(self, *, session_id: str, text: str, profile
                 gateway_session_key=None, **overrides, route=route, requested_runtime={},
                 route_source="global", session_history_delivery="1",
                 notification_category=notification_category,
+                # This in-process door exists only for the wake self-post: mark the turn so its
+                # persisted user row stays a machinery notice (the HTTP self-post sends the same
+                # marker as ``hermes_internal_wake``).
+                internal_wake=True,
             )
             return
         raise RuntimeError(

@@ -265,6 +265,7 @@ def test_internal_session_turn_targets_the_live_session_under_the_owner_profile(
     assert "live turn" in str(seen["conversation_history"])
     assert seen["user_message"] == "wake"
     assert seen["session_history_delivery"] == "1"
+    assert seen["internal_wake"] is True  # in-process wake mark: machinery notice, not a client prompt
     assert seen["route"] == aliased_route  # resolved like the HTTP wake path, not route=None
     assert seen["home"] == str(served.builder)
     assert seen["request_profile"] == "builder"

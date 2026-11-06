@@ -345,6 +345,11 @@ async def execute_admission(authority, ref, row):
                     event.text = '\n'.join(part['text'] for part in prepared['content'] if part.get('type') == 'text')
                 event.allow_gateway_control = False
                 event.internal = True  # trust comes from the private binding and preclaim, never client JSON
+                if not prepared['internal_wake']:
+                    # internal=True here is admission trust, not machine origin: a genuine api
+                    # client prompt persists as an ordinary user row. Only the producer-marked
+                    # wake self-post keeps the machinery display kind (response_filters).
+                    event._api_client_prompt = True
             response = await authority.runner._handle_message(event)
             result = captured.get('terminal_result', captured.get('result'))
             if result is None:

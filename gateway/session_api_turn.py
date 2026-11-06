@@ -57,8 +57,9 @@ def check_api_turn(authority, ref, payload):
         # 'browser_control' is accepted and ignored: admissions persisted while the removed
         # browser-extension control existed may carry it and must still recover.
         if (set(data) - {'history', 'settings', 'turn_author', 'media', 'run_owner_scope', 'browser_control',
-                         'relay_metadata', 'resume_unanswered'}
+                         'relay_metadata', 'resume_unanswered', 'internal_wake'}
                 or data.get('resume_unanswered', True) is not True
+                or ('internal_wake' in data and data['internal_wake'] is not True)
                 or not {'history', 'settings'} <= set(data)
                 or not isinstance(data.get('relay_metadata', {}), dict)
                 or (data['history'] is not None and not isinstance(data['history'], list))
@@ -191,6 +192,11 @@ def admit_api_steps(adapter, **kwargs):
         # The request's Relay metadata rides the admission to the turn it describes (main passed it
         # to ``run_conversation``); it is client JSON, so it is part of the exact-retry identity.
         payload['api_turn_v1']['relay_metadata'] = kwargs['relay_metadata']
+    if kwargs.get('internal_wake'):
+        # The wake self-post's trusted mark (gateway/wake.py, in-process or HTTP): this admission's
+        # turn is machine-synthesized, so the drain keeps its user row a machinery notice. Every
+        # other api admission is a genuine client prompt and persists as an ordinary user row.
+        payload['api_turn_v1']['internal_wake'] = True
     request_id = kwargs.get('request_id') or kwargs.get('active_run_id') or uuid.uuid4().hex
     if not isinstance(kwargs['user_message'], list):
         return (yield from _admit_api_payload(authority, adapter, sid, request_id, payload, settings, declared_key, kwargs))
@@ -447,7 +453,8 @@ def prepare_api_execution(authority, ref, payload):
     return {'adapter': adapter, 'settings': settings, 'history': data['history'] if data else None,
             'content': content, 'turn_author': data.get('turn_author') if data else None,
             'relay_metadata': data.get('relay_metadata') if data else None,
-            'resume_unanswered': bool(data and data.get('resume_unanswered'))}
+            'resume_unanswered': bool(data and data.get('resume_unanswered')),
+            'internal_wake': bool(data and data.get('internal_wake'))}
 
 
 def _api_observers(authority, session_id):

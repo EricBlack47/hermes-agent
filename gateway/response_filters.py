@@ -184,6 +184,11 @@ def display_kind_for_event(event: Any) -> str | None:
         return kind
     if getattr(event, "internal", False) and _producer_card(event):
         return event.metadata["display_kind"]
+    if getattr(event, "_api_client_prompt", False):
+        # api_server admission stamps internal=True for trust only; this event is a genuine
+        # client prompt, so it persists as an ordinary user row (session_ingress sets the mark;
+        # only the producer-marked wake self-post lacks it).
+        return None
     if getattr(event, "internal", False) or getattr(event, "_heartbeat_session_id", None):
         return INTERNAL_NOTIFICATION_DISPLAY_KIND
     return None

@@ -267,7 +267,11 @@ async def _self_post_chat_completion(adapter: Any, *, text: str, session_id: str
     url = f"http://{host}:{port}/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "X-Hermes-Session-Id": session_id}
     payload = {"model": str(getattr(adapter, "_model_name", "") or "hermes-agent"),
-               "messages": [{"role": "user", "content": text}], "stream": False}
+               "messages": [{"role": "user", "content": text}], "stream": False,
+               # Every self-post IS a machine wake: the marker is what lets the API admission
+               # keep this turn's persisted user row a machinery notice instead of an ordinary
+               # client prompt (session_ingress stamps every api turn internal=True for trust).
+               "hermes_internal_wake": True}
     if notification_category == "diagnostic":
         payload["hermes_notification_category"] = "diagnostic"
     last_err: Optional[BaseException] = None

@@ -961,6 +961,11 @@ class OpenAICompatRoutesMixin:
         # above still applies; it grants no internal ingress or control authority.
         if provided_session_id and body.get("hermes_notification_category") == "diagnostic":
             run_kwargs["notification_category"] = "diagnostic"
+        if provided_session_id and body.get("hermes_internal_wake") is True:
+            # gateway/wake.py self-post marker: this turn is machine-synthesized, so its
+            # admitted user row keeps the machinery display kind. Like the category above it
+            # only relabels the caller's own transcript presentation — it grants nothing.
+            run_kwargs["internal_wake"] = True
         if stream:
             _stream_q = ThreadSafeAsyncQueue()
             # tool_call_ids with an emitted "running": a "completed" without one (internal/
@@ -1010,7 +1015,7 @@ class OpenAICompatRoutesMixin:
         outcome, err = await self._run_idempotent(
             request, body, _compute_completion, log_label="chat completions",
             fingerprint_keys=["model", "provider", "model_options", "messages", "tools", "tool_choice", "stream",
-                              "hermes_notification_category"],
+                              "hermes_notification_category", "hermes_internal_wake"],
             route="chat_completions",
         )
         if err is not None:
