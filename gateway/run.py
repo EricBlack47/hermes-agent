@@ -1167,6 +1167,19 @@ def _build_replay_entry(
     for stamp in (MERGED_DURABLE_ROWS, UNNAMED_DURABLE_ROWS, RETIRED_DURABLE_ROWS):
         if msg.get(stamp):
             entry[stamp] = msg[stamp]
+    # Durable display + delivery bookkeeping rides the live dict exactly as the store wrote it:
+    # display_kind/display_metadata are persistence-only (turn_context pops them from every wire
+    # copy) and platform_message_id/message_id are transport-stripped, so carrying them changes
+    # no prompt bytes. A carried row re-persisted without them rewrote display_kind=NULL and
+    # resurrected internal_notification rows as plain user turns. Runs after the scaffolding
+    # stub so the stored metadata (which already holds the restatement flag) wins whole.
+    if msg.get("display_kind"):
+        entry["display_kind"] = msg["display_kind"]
+    if msg.get("display_metadata"):
+        entry["display_metadata"] = msg["display_metadata"]
+    for key in ("platform_message_id", "message_id"):
+        if msg.get(key):
+            entry[key] = msg[key]
     return entry
 
 

@@ -181,3 +181,84 @@ def test_a_plain_replay_row_does_not_carry_a_tool_call_uid_map_without_its_calls
     replayed, _ = _build_gateway_agent_history(history)
     assert replayed[1]["message_uid"] == "2" * 32
     assert "_tool_call_uids" not in replayed[1] and "_tool_call_uid" not in replayed[1]
+
+
+def test_replay_keeps_durable_display_and_delivery_fields():
+    """The transcript->agent_history rebuild must keep the durable row's display and delivery
+    bookkeeping: ``display_kind``/``display_metadata`` are persistence-only (turn_context pops
+    them from every wire copy) and ``message_id``/``platform_message_id`` are transport-stripped,
+    so carrying them changes no prompt bytes — but a carried row re-persisted without them
+    rewrites ``display_kind=NULL`` and resurrects as a plain user turn."""
+    from gateway.run import _build_gateway_agent_history
+
+    history = [
+        {"role": "user", "content": "[watcher] build finished",
+         "display_kind": "internal_notification",
+         "display_metadata": {"notification_category": "watcher"},
+         "message_id": "bot:evt-1", "message_uid": "1" * 32,
+         "timestamp": 1_700_000_000.0, "_db_persisted": True},
+        {"role": "assistant", "content": "ack", "message_uid": "2" * 32},
+    ]
+    replayed, _ = _build_gateway_agent_history(history)
+    row = replayed[0]
+    assert row["display_kind"] == "internal_notification"
+    assert row["display_metadata"] == {"notification_category": "watcher"}
+    assert row["message_id"] == "bot:evt-1"
+    assert row["message_uid"] == "1" * 32
+
+
+def test_compaction_rewrite_keeps_display_classification(tmp_path):
+    """End-to-end: a stored ``internal_notification`` row loaded as the turn transcript, rebuilt
+    by the gateway replay projection, then re-persisted by ``archive_and_compact`` (the in-place
+    compaction commit and the proactive-prune re-persist both feed it this view) must land its
+    carried copy with ``display_kind``/``display_metadata``/platform id intact — the corruption
+    this guards wrote NULL display columns, so the injected row reappeared as a visible user turn."""
+    import json
+    import sqlite3
+
+    from gateway.config import GatewayConfig
+    from gateway.run import _build_gateway_agent_history
+    from gateway.session import SessionStore
+    from hermes_state import SessionDB
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    store = SessionStore(tmp_path / "sessions", GatewayConfig())
+    store._db = db
+    try:
+        db.create_session("room", source="matrix")
+        db.append_message(
+            "room", "user", "[watcher] build finished",
+            display_kind="internal_notification",
+            display_metadata={"notification_category": "watcher"},
+            platform_message_id="bot:evt-1",
+            timestamp=1_700_000_000.0)
+        db.append_message("room", "assistant", "ack", timestamp=1_700_000_001.0)
+        uid = next(m["message_uid"] for m in db.get_messages_as_conversation("room")
+                   if m["content"] == "[watcher] build finished")
+
+        replayed, _ = _build_gateway_agent_history(store.load_transcript("room"))
+        db.archive_and_compact(
+            "room",
+            [{"role": "user", "content": "[CONTEXT COMPACTION] earlier turns",
+              "_compressed_summary": True}, *replayed],
+            tail_count=len(replayed))
+
+        conn = sqlite3.connect(db.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            live = [dict(r) for r in conn.execute(
+                "SELECT id, active, display_kind, display_metadata, platform_message_id, message_uid "
+                "FROM messages WHERE session_id = 'room' AND content = ? AND active = 1",
+                ("[watcher] build finished",)).fetchall()]
+        finally:
+            conn.close()
+    finally:
+        db.close()
+        store.close_all_db_handles()
+
+    assert len(live) == 1
+    row = live[0]
+    assert row["display_kind"] == "internal_notification"
+    assert json.loads(row["display_metadata"]) == {"notification_category": "watcher"}
+    assert row["platform_message_id"] == "bot:evt-1"
+    assert row["message_uid"] == uid
